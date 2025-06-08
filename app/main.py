@@ -56,7 +56,8 @@ class IOTService:
         self.devices = []
 
     async def register_device(self, device: Device) -> int:
-        await asyncio.sleep(0.1)  # simulate registration delay
+        # Registration must be synchronized to ensure unique IDs
+        await asyncio.sleep(0.1)
         self.devices.append(device)
         return len(self.devices) - 1
 
@@ -67,16 +68,14 @@ class IOTService:
 async def main() -> None:
     service = IOTService()
 
-    # Register devices
+    # Register devices sequentially to ensure unique IDs
     hue_light = HueLightDevice()
     speaker = SmartSpeakerDevice()
     toilet = SmartToiletDevice()
 
-    hue_light_id, speaker_id, toilet_id = await asyncio.gather(
-        service.register_device(hue_light),
-        service.register_device(speaker),
-        service.register_device(toilet)
-    )
+    hue_light_id = await service.register_device(hue_light)
+    speaker_id = await service.register_device(speaker)
+    toilet_id = await service.register_device(toilet)
 
     # Get devices
     light = service.get_device(hue_light_id)
