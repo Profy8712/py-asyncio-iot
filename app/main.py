@@ -1,44 +1,109 @@
+import asyncio
 import time
+from typing import Any, Awaitable
 
-from iot.devices import HueLightDevice, SmartSpeakerDevice, SmartToiletDevice
-from iot.message import Message, MessageType
-from iot.service import IOTService
+# Typing and helper functions
+async def run_sequence(*functions: Awaitable[Any]) -> None:
+    for function in functions:
+        await function
 
+async def run_parallel(*functions: Awaitable[Any]) -> None:
+    await asyncio.gather(*functions)
 
-def main() -> None:
-    # create an IOT service
+# Simulated MessageType
+class MessageType:
+    SWITCH_ON = "switch_on"
+    SWITCH_OFF = "switch_off"
+    PLAY_SONG = "play_song"
+    FLUSH = "flush"
+    CLEAN = "clean"
+
+# Base device class
+class Device:
+    async def send(self, msg_type: str, *args: Any) -> None:
+        raise NotImplementedError
+
+# Devices
+class HueLightDevice(Device):
+    async def send(self, msg_type: str, *args: Any) -> None:
+        await asyncio.sleep(1)
+        if msg_type == MessageType.SWITCH_ON:
+            print("Hue Light: switched ON")
+        elif msg_type == MessageType.SWITCH_OFF:
+            print("Hue Light: switched OFF")
+
+class SmartSpeakerDevice(Device):
+    async def send(self, msg_type: str, *args: Any) -> None:
+        await asyncio.sleep(1)
+        if msg_type == MessageType.SWITCH_ON:
+            print("Speaker: turned ON")
+        elif msg_type == MessageType.SWITCH_OFF:
+            print("Speaker: turned OFF")
+        elif msg_type == MessageType.PLAY_SONG:
+            print(f"Speaker: playing song — {args[0]}")
+
+class SmartToiletDevice(Device):
+    async def send(self, msg_type: str, *args: Any) -> None:
+        await asyncio.sleep(1)
+        if msg_type == MessageType.FLUSH:
+            print("Toilet: flushing")
+        elif msg_type == MessageType.CLEAN:
+            print("Toilet: cleaning")
+
+# Service
+class IOTService:
+    def __init__(self) -> None:
+        self.devices = []
+
+    async def register_device(self, device: Device) -> int:
+        await asyncio.sleep(0.1)  # simulate registration delay
+        self.devices.append(device)
+        return len(self.devices) - 1
+
+    def get_device(self, device_id: int) -> Device:
+        return self.devices[device_id]
+
+# Main program
+async def main() -> None:
     service = IOTService()
 
-    # create and register a few devices
+    # Register devices
     hue_light = HueLightDevice()
     speaker = SmartSpeakerDevice()
     toilet = SmartToiletDevice()
-    hue_light_id = service.register_device(hue_light)
-    speaker_id = service.register_device(speaker)
-    toilet_id = service.register_device(toilet)
 
-    # create a few programs
-    wake_up_program = [
-        Message(hue_light_id, MessageType.SWITCH_ON),
-        Message(speaker_id, MessageType.SWITCH_ON),
-        Message(speaker_id, MessageType.PLAY_SONG, "Rick Astley - Never Gonna Give You Up"),
-    ]
+    hue_light_id, speaker_id, toilet_id = await asyncio.gather(
+        service.register_device(hue_light),
+        service.register_device(speaker),
+        service.register_device(toilet)
+    )
 
-    sleep_program = [
-        Message(hue_light_id, MessageType.SWITCH_OFF),
-        Message(speaker_id, MessageType.SWITCH_OFF),
-        Message(toilet_id, MessageType.FLUSH),
-        Message(toilet_id, MessageType.CLEAN),
-    ]
+    # Get devices
+    light = service.get_device(hue_light_id)
+    spk = service.get_device(speaker_id)
+    wc = service.get_device(toilet_id)
 
-    # run the programs
-    service.run_program(wake_up_program)
-    service.run_program(sleep_program)
+    # Wake up program (parallel with logical sequence)
+    await run_parallel(
+        light.send(MessageType.SWITCH_ON),
+        run_sequence(
+            spk.send(MessageType.SWITCH_ON),
+            spk.send(MessageType.PLAY_SONG, "Rick Astley - Never Gonna Give You Up")
+        )
+    )
 
+    # Sleep program
+    await run_parallel(
+        light.send(MessageType.SWITCH_OFF),
+        spk.send(MessageType.SWITCH_OFF),
+        run_sequence(
+            wc.send(MessageType.FLUSH),
+            wc.send(MessageType.CLEAN)
+        )
+    )
 
 if __name__ == "__main__":
     start = time.perf_counter()
-    main()
+    asyncio.run(main())
     end = time.perf_counter()
-
-    print("Elapsed:", end - start)
+    print(f"Elapsed: {end - start:.2f} seconds")
